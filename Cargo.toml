@@ -33,6 +33,7 @@ path = "bindings/rust/src/lib.rs"
 [dependencies]
 bitflags = "2.3.3"
 libc = "0.2"
+zerocopy = { version = "0.8.14", features = ["derive"] }
 
 [build-dependencies]
 cc = { version = "1.0" }

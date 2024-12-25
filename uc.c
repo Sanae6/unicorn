@@ -2086,6 +2086,15 @@ uc_err uc_query(uc_engine *uc, uc_query_type type, size_t *result)
     case UC_QUERY_TIMEOUT:
         *result = uc->timed_out;
         break;
+
+    case UC_QUERY_SYNDROME:
+#ifdef UNICORN_HAS_ARM
+        if (uc->arch == UC_ARCH_ARM || uc->arch == UC_ARCH_ARM64) {
+            return uc->query(uc, type, result);
+        }
+#endif
+        *result = 0;
+        break;
     }
 
     restore_jit_state(uc);

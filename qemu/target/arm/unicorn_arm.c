@@ -578,6 +578,7 @@ static uc_err arm_query(struct uc_struct *uc, uc_query_type type,
                         size_t *result)
 {
     CPUState *mycpu = uc->cpu;
+    CPUARMState *env = mycpu->env_ptr;
     uint32_t mode;
 
     switch (type) {
@@ -588,6 +589,9 @@ static uc_err arm_query(struct uc_struct *uc, uc_query_type type,
         mode |=
             ((ARM_CPU(mycpu)->env.thumb != 0) ? UC_MODE_THUMB : UC_MODE_ARM);
         *result = mode;
+        return UC_ERR_OK;
+    case UC_QUERY_SYNDROME:
+        *result = env->exception.syndrome;
         return UC_ERR_OK;
     default:
         return UC_ERR_ARG;

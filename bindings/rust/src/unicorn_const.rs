@@ -140,6 +140,7 @@ pub enum Query {
     PAGE_SIZE = 2,
     ARCH = 3,
     TIMEOUT = 4,
+    SYNDROME = 5,
 }
 
 bitflags! {

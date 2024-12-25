@@ -221,3 +221,34 @@ impl From<&ArmCpuModel> for i32 {
         *value as i32
     }
 }
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, zerocopy::FromBytes, zerocopy::IntoBytes, zerocopy::Immutable)]
+#[repr(C)]
+pub struct ArmCpRegister {
+  pub crn: u32,
+  pub crm: u32,
+  pub op0: u32,
+  pub op1: u32,
+  pub op2: u32,
+}
+
+impl ArmCpRegister {
+    pub const fn from_manual(
+        op0: u32,
+        op1: u32,
+        crn: u32,
+        crm: u32,
+        op2: u32,
+    ) -> Self {
+        Self { crn, crm, op0, op1, op2 }
+    }
+}
+
+#[derive(zerocopy::FromBytes, zerocopy::IntoBytes, zerocopy::Immutable)]
+#[repr(C)]
+pub(crate) struct ArmCpRegisterInput {
+  pub reg: ArmCpRegister,
+  pub _pad: u32,
+  // value to be written or read
+  pub value: u64,
+}

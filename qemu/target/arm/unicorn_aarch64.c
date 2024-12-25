@@ -440,6 +440,21 @@ static int arm64_cpus_init(struct uc_struct *uc, const char *cpu_model)
     return 0;
 }
 
+static uc_err arm64_query(struct uc_struct *uc, uc_query_type type,
+                        size_t *result)
+{
+    CPUState *mycpu = uc->cpu;
+    CPUARMState *env = mycpu->env_ptr;
+
+    switch (type) {
+    case UC_QUERY_SYNDROME:
+        *result = env->exception.syndrome;
+        return UC_ERR_OK;
+    default:
+        return UC_ERR_ARG;
+    }
+}
+
 DEFAULT_VISIBILITY
 void uc_init(struct uc_struct *uc)
 {
@@ -448,6 +463,7 @@ void uc_init(struct uc_struct *uc)
     uc->reg_reset = reg_reset;
     uc->set_pc = arm64_set_pc;
     uc->get_pc = arm64_get_pc;
+    uc->query = arm64_query;
     uc->release = arm64_release;
     uc->cpus_init = arm64_cpus_init;
     uc->cpu_context_size = offsetof(CPUARMState, cpu_watchpoint);

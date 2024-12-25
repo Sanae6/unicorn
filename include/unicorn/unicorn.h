@@ -477,6 +477,7 @@ typedef enum uc_query_type {
     UC_QUERY_ARCH, // query architecture of engine (for ARM to query Thumb mode)
     UC_QUERY_TIMEOUT, // query if emulation stops due to timeout (indicated if
                       // result = True)
+    UC_QUERY_SYNDROME, // query exception syndrome (ARM)
 } uc_query_type;
 
 // The implementation of uc_ctl is like what Linux ioctl does but slightly

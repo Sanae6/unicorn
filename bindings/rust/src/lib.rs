@@ -551,6 +551,23 @@ impl<'a, D> Unicorn<'a, D> {
         unsafe { ffi::uc_reg_write(self.get_handle(), regid.into(), value.as_ptr() as _) }.into()
     }
 
+    #[cfg(feature = "arch_arm")]
+    pub fn reg_write_cp<T: Into<i32>>(&self, regid: T, cp_reg: ArmCpRegister, value: u64) -> Result<(), uc_error> {
+        if !matches!(self.get_arch(), Arch::ARM | Arch::ARM64) {
+            return Err(uc_error::ARCH)
+        }
+    
+        use zerocopy::IntoBytes;
+    
+        let mut input = ArmCpRegisterInput {
+            reg: cp_reg,
+            _pad: 0,
+            value,
+        };
+        unsafe { ffi::uc_reg_write(self.get_handle(), regid.into(), input.as_mut_bytes().as_mut_ptr() as _) }
+            .into()
+    }
+
     /// Read an unsigned value from a register.
     ///
     /// Not to be used with registers larger than 64 bit.
@@ -604,6 +621,20 @@ impl<'a, D> Unicorn<'a, D> {
         let mut value = vec![0; value_size];
         unsafe { ffi::uc_reg_read(self.get_handle(), curr_reg_id, value.as_mut_ptr() as _) }
             .and_then(|| Ok(value.into_boxed_slice()))
+    }
+
+    #[cfg(feature = "arch_arm")]
+    pub fn reg_cp_read<T: Into<i32>>(&self, regid: T, cp_reg: ArmCpRegister) -> Result<u64, uc_error> {
+        if !matches!(self.get_arch(), Arch::ARM | Arch::ARM64) {
+            return Err(uc_error::ARCH)
+        }
+    
+        use zerocopy::{FromZeros, IntoBytes};
+    
+        let mut input = ArmCpRegisterInput::new_zeroed();
+        input.reg = cp_reg;
+        unsafe { ffi::uc_reg_read(self.get_handle(), regid.into(), input.as_mut_bytes().as_mut_ptr() as _) }
+            .and_then(|| Ok(input.value))
     }
 
     #[cfg(feature = "arch_arm")]
