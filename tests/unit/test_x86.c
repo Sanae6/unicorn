@@ -61,8 +61,8 @@ static void QuickTest_run(QuickTest *test)
             uint64_t value = 0;
             OK(uc_reg_read(uc, out->reg, &value));
             acutest_check_(value == out->value, out->file, out->line,
-                           "OUT_REG(%s, 0x%llX) = 0x%llX", out->name,
-                           out->value, value);
+                           "OUT_REG(%s, 0x%" PRIx64 ") = 0x%" PRIx64 "",
+                           out->name, out->value, value);
         } else {
             uint32_t value = 0;
             OK(uc_reg_read(uc, out->reg, &value));
@@ -247,7 +247,11 @@ static void test_x86_inc_dec_pxor(void)
     uint64_t r_xmm0[2] = {0x08090a0b0c0d0e0f, 0x0001020304050607};
     uint64_t r_xmm1[2] = {0x8090a0b0c0d0e0f0, 0x0010203040506070};
 
-    uc_common_setup(&uc, UC_ARCH_X86, UC_MODE_32, code, sizeof(code) - 1);
+    OK(uc_open(UC_ARCH_X86, UC_MODE_32, &uc));
+    OK(uc_ctl_set_cpu_model(uc, UC_CPU_X86_HASWELL));
+    OK(uc_mem_map(uc, code_start, code_len, UC_PROT_ALL));
+    OK(uc_mem_write(uc, code_start, code, sizeof(code) - 1));
+
     OK(uc_reg_write(uc, UC_X86_REG_ECX, &r_ecx));
     OK(uc_reg_write(uc, UC_X86_REG_EDX, &r_edx));
     OK(uc_reg_write(uc, UC_X86_REG_XMM0, &r_xmm0));
@@ -628,30 +632,34 @@ static void test_x86_smc_add(void)
 {
     uc_engine *uc;
     uint64_t stack_base = 0x20000;
-    int r_rsp;
+    uint64_t r_rsp;
     /*
      * mov qword ptr [rip+0x10], rax
      * mov word ptr [rip], 0x0548
-     * [orig] mov eax, dword ptr [rax + 0x12345678]; [after SMC] 480578563412 add rax, 0x12345678
-     * hlt
+     * [orig] mov eax, dword ptr [rax + 0x12345678]; [after SMC] 480578563412
+     * add rax, 0x12345678 hlt
      */
-    char code[] = "\x48\x89\x05\x10\x00\x00\x00\x66\xc7\x05\x00\x00\x00\x00\x48\x05\x8b\x80\x78\x56\x34\x12\xf4";
+    char code[] = "\x48\x89\x05\x10\x00\x00\x00\x66\xc7\x05\x00\x00\x00\x00\x48"
+                  "\x05\x8b\x80\x78\x56\x34\x12\xf4";
     uc_common_setup(&uc, UC_ARCH_X86, UC_MODE_64, code, sizeof(code) - 1);
 
     OK(uc_mem_map(uc, stack_base, 0x2000, UC_PROT_ALL));
     r_rsp = stack_base + 0x1800;
     OK(uc_reg_write(uc, UC_X86_REG_RSP, &r_rsp));
     OK(uc_emu_start(uc, code_start, -1, 0, 0));
+
+    OK(uc_close(uc));
 }
 
 static void test_x86_smc_mem_hook_callback(uc_engine *uc, uc_mem_type t,
                                            uint64_t addr, int size,
                                            uint64_t value, void *user_data)
 {
-    uint64_t write_addresses[] = { 0x1030, 0x1010, 0x1010, 0x1018, 0x1018, 0x1029, 0x1029 };
+    uint64_t write_addresses[] = {0x1030, 0x1010, 0x1010, 0x1018,
+                                  0x1018, 0x1029, 0x1029};
     unsigned int *i = user_data;
 
-    TEST_CHECK(*i < (sizeof(write_addresses)/sizeof(write_addresses[0])));
+    TEST_CHECK(*i < (sizeof(write_addresses) / sizeof(write_addresses[0])));
     TEST_CHECK(write_addresses[*i] == addr);
     (*i)++;
 }
@@ -661,28 +669,30 @@ static void test_x86_smc_mem_hook(void)
     uc_engine *uc;
     uc_hook hook;
     uint64_t stack_base = 0x20000;
-    int r_rsp;
+    uint64_t r_rsp;
     unsigned int i = 0;
     /*
      * mov qword ptr [rip+0x29], rax
      * mov word ptr [rip], 0x0548
-     * [orig] mov eax, dword ptr [rax + 0x12345678]; [after SMC] 480578563412 add rax, 0x12345678
-     * nop
-     * nop
-     * nop
-     * mov qword ptr [rip-0x08], rax
-     * mov word ptr [rip], 0x0548
-     * [orig] mov eax, dword ptr [rax + 0x12345678]; [after SMC] 480578563412 add rax, 0x12345678
-     * hlt
+     * [orig] mov eax, dword ptr [rax + 0x12345678]; [after SMC] 480578563412
+     * add rax, 0x12345678 nop nop nop mov qword ptr [rip-0x08], rax mov word
+     * ptr [rip], 0x0548 [orig] mov eax, dword ptr [rax + 0x12345678]; [after
+     * SMC] 480578563412 add rax, 0x12345678 hlt
      */
-    char code[] = "\x48\x89\x05\x29\x00\x00\x00\x66\xC7\x05\x00\x00\x00\x00\x48\x05\x8B\x80\x78\x56\x34\x12\x90\x90\x90\x48\x89\x05\xF8\xFF\xFF\xFF\x66\xC7\x05\x00\x00\x00\x00\x48\x05\x8B\x80\x78\x56\x34\x12\xF4";
+    char code[] =
+        "\x48\x89\x05\x29\x00\x00\x00\x66\xC7\x05\x00\x00\x00\x00\x48\x05\x8B"
+        "\x80\x78\x56\x34\x12\x90\x90\x90\x48\x89\x05\xF8\xFF\xFF\xFF\x66\xC7"
+        "\x05\x00\x00\x00\x00\x48\x05\x8B\x80\x78\x56\x34\x12\xF4";
     uc_common_setup(&uc, UC_ARCH_X86, UC_MODE_64, code, sizeof(code) - 1);
 
-    OK(uc_hook_add(uc, &hook, UC_HOOK_MEM_WRITE, test_x86_smc_mem_hook_callback, &i, 1, 0));
+    OK(uc_hook_add(uc, &hook, UC_HOOK_MEM_WRITE, test_x86_smc_mem_hook_callback,
+                   &i, 1, 0));
     OK(uc_mem_map(uc, stack_base, 0x2000, UC_PROT_ALL));
     r_rsp = stack_base + 0x1800;
     OK(uc_reg_write(uc, UC_X86_REG_RSP, &r_rsp));
     OK(uc_emu_start(uc, code_start, -1, 0, 0));
+
+    OK(uc_close(uc));
 }
 
 static uint64_t test_x86_mmio_uc_mem_rw_read_callback(uc_engine *uc,
@@ -1342,6 +1352,46 @@ static void test_x86_unaligned_access(void)
 
     OK(uc_close(uc));
 }
+
+static void test_x86_64_unaligned_access(void)
+{
+    uc_engine *uc;
+    uc_hook hook;
+    char code[] = {"\x48\x89\x01" //   mov         qword ptr [rcx],rax
+                   "\x48\x8b\x00" //  mov         rax,qword ptr [rax]
+                   "\xcc"};
+    uint64_t r_rax = LEINT64(0x2fffff);
+    uint64_t r_rcx = LEINT64(0x2fffff);
+    struct writelog_t write_log[10];
+    struct writelog_t read_log[10];
+    memset(write_log, 0, sizeof(write_log));
+    memset(read_log, 0, sizeof(read_log));
+    uc_common_setup(&uc, UC_ARCH_X86, UC_MODE_64, code, sizeof(code) - 1);
+    OK(uc_mem_map(uc, 0x200000, 0x200000, UC_PROT_ALL));
+    OK(uc_hook_add(uc, &hook, UC_HOOK_MEM_WRITE,
+                   test_x86_unaligned_access_callback, write_log, 1, 0));
+    OK(uc_hook_add(uc, &hook, UC_HOOK_MEM_READ,
+                   test_x86_unaligned_access_callback, read_log, 1, 0));
+
+    OK(uc_reg_write(uc, UC_X86_REG_RAX, &r_rax));
+    OK(uc_reg_write(uc, UC_X86_REG_RCX, &r_rcx));
+
+    OK(uc_emu_start(uc, code_start, code_start + sizeof(code) - 1, 0, 2));
+
+    TEST_CHECK(write_log[0].addr == 0x2fffff);
+    TEST_CHECK(write_log[0].size == 8);
+    TEST_CHECK(write_log[1].size == 0);
+
+    TEST_CHECK(read_log[0].addr == 0x2fffff);
+    TEST_CHECK(read_log[0].size == 8);
+    TEST_CHECK(read_log[1].size == 0);
+
+    uint64_t b;
+    OK(uc_mem_read(uc, 0x2fffff, &b, 8));
+    TEST_CHECK(b == 0x2fffff);
+
+    OK(uc_close(uc));
+}
 #endif
 
 static bool test_x86_lazy_mapping_mem_callback(uc_engine *uc, uc_mem_type type,
@@ -1543,6 +1593,8 @@ static void test_x86_mmu(void)
     OK(uc_mem_read(uc, 0x2000, &child, sizeof(child)));
     TEST_CHECK(parrent == 60);
     TEST_CHECK(child == 42);
+    OK(uc_context_free(context));
+    OK(uc_close(uc));
 }
 
 static bool test_x86_vtlb_callback(uc_engine *uc, uint64_t addr,
@@ -1586,6 +1638,7 @@ static void test_x86_segmentation(void)
     OK(uc_open(UC_ARCH_X86, UC_MODE_64, &uc));
     OK(uc_reg_write(uc, UC_X86_REG_GDTR, &gdtr));
     uc_assert_err(UC_ERR_EXCEPTION, uc_reg_write(uc, UC_X86_REG_FS, &fs));
+    OK(uc_close(uc));
 }
 
 static void test_x86_0xff_lcall_callback(uc_engine *uc, uint64_t address,
@@ -1977,6 +2030,47 @@ static void test_x86_hook_insn_rdtscp(void)
     OK(uc_close(uc));
 }
 
+static void test_x86_dr7()
+{
+    uc_engine *uc;
+    char code[] =
+        "\x48\xC7\xC0\x05\x00\x01\x00\x0F\x23\xF8"; // mov rax, 0x10005
+                                                    // mov dr7, rax
+    uc_common_setup(&uc, UC_ARCH_X86, UC_MODE_64, code, sizeof(code) - 1);
+    OK(uc_emu_start(uc, code_start, code_start + sizeof(code) - 1, 0, 0));
+
+    OK(uc_close(uc));
+}
+
+static void test_x86_hook_block_cb(uc_engine *uc, uint64_t address,
+                                   uint32_t size, void *user_data)
+{
+    uint32_t pc;
+
+    OK(uc_reg_read(uc, UC_X86_REG_EIP, (void *)&pc));
+
+    TEST_CHECK(pc == address);
+    *((uint64_t *)user_data) += 1;
+}
+
+static void test_x86_hook_block()
+{
+    uc_engine *uc;
+    char code[] = "\xeb\x02\x90\x90\x90\x90\x90\x90"; // jmp 4; nop; nop; nop;
+                                                      // nop; nop; nop
+    uint64_t cnt = 0;
+    uc_hook hk;
+
+    uc_common_setup(&uc, UC_ARCH_X86, UC_MODE_32, code, sizeof(code) - 1);
+
+    OK(uc_hook_add(uc, &hk, UC_HOOK_BLOCK, test_x86_hook_block_cb, (void *)&cnt,
+                   1, 0));
+    OK(uc_emu_start(uc, code_start, code_start + sizeof(code) - 1, 0, 0));
+
+    TEST_CHECK(cnt == 2);
+    OK(uc_close(uc));
+}
+
 TEST_LIST = {
     {"test_x86_in", test_x86_in},
     {"test_x86_out", test_x86_out},
@@ -2019,6 +2113,8 @@ TEST_LIST = {
     {"test_x86_invalid_vex_l", test_x86_invalid_vex_l},
 #if !defined(TARGET_READ_INLINED) && defined(BOOST_LITTLE_ENDIAN)
     {"test_x86_unaligned_access", test_x86_unaligned_access},
+    {"test_x86_64_unaligned_access", test_x86_64_unaligned_access},
+
 #endif
     {"test_x86_lazy_mapping", test_x86_lazy_mapping},
     {"test_x86_16_incorrect_ip", test_x86_16_incorrect_ip},
@@ -2035,4 +2131,6 @@ TEST_LIST = {
     {"test_x86_ro_segfault", test_x86_ro_segfault},
     {"test_x86_hook_insn_rdtsc", test_x86_hook_insn_rdtsc},
     {"test_x86_hook_insn_rdtscp", test_x86_hook_insn_rdtscp},
+    {"test_x86_dr7", test_x86_dr7},
+    {"test_x86_hook_block", test_x86_hook_block},
     {NULL, NULL}};
